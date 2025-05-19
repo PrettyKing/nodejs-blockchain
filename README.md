@@ -36,6 +36,7 @@ blockchain-nodejs/
 ### 安装依赖
 
 ```bash
+# 安装所有依赖，包括cross-env用于跨平台兼容
 npm install
 ```
 
@@ -47,7 +48,38 @@ npm start
 
 ### 启动多个节点
 
+#### 在Windows系统上:
+
 ```bash
+# 启动第一个节点
+npm start
+
+# 在新终端启动第二个节点
+npm run node2-win
+
+# 在另一个终端启动第三个节点
+npm run node3-win
+```
+
+#### 在Linux/Mac系统上:
+
+```bash
+# 启动第一个节点
+npm start
+
+# 在新终端启动第二个节点
+npm run node2-unix
+
+# 在另一个终端启动第三个节点
+npm run node3-unix
+```
+
+#### 使用cross-env(推荐，适用于所有系统):
+
+```bash
+# 安装cross-env
+npm install cross-env -g
+
 # 启动第一个节点
 npm start
 
@@ -121,6 +153,21 @@ node wallet.js list
 
 ```bash
 node wallet.js info <钱包名称>
+```
+
+## 常见问题解决
+
+### Windows环境变量问题
+
+如果在Windows系统中遇到`'HTTP_PORT' 不是内部或外部命令，也不是可运行的程序或批处理文件`错误，请使用以下命令之一:
+
+```bash
+# 使用Windows专用脚本
+npm run node2-win
+
+# 或者安装并使用cross-env(推荐)
+npm install cross-env -g
+npm run node2
 ```
 
 ## 开发
