@@ -3,10 +3,18 @@ main = "worker.js"
 compatibility_date = "2023-09-04"
 compatibility_flags = ["nodejs_compat"]
 
-# 添加KV命名空间来存储区块链数据
-kv_namespaces = [
-  { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-will-go-here", preview_id = "your-preview-kv-id-will-go-here" }
-]
+# 如何创建KV命名空间:
+# 运行 `wrangler kv:namespace create "BLOCKCHAIN_STORAGE"`
+# 然后将输出的ID复制到下面
+
+# 本地开发模式下使用这个环境变量来模拟KV
+[vars]
+USE_IN_MEMORY_STORE = "true"
+
+# 注释掉这段，直到你创建了自己的KV命名空间
+# kv_namespaces = [
+#   { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-will-go-here", preview_id = "your-preview-kv-id-will-go-here" }
+# ]
 
 # 增加Cloudflare Worker的CPU时间限制，以支持挖矿操作
 [build]
