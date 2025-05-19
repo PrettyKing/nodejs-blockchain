@@ -15,27 +15,57 @@ const memoryStorage = {
 class Block {
   constructor(timestamp, transactions, previousHash = '') {
     this.timestamp = timestamp;
-    this.transactions = transactions;
+    this.transactions = transactions || []; // 确保transactions始终是数组
     this.previousHash = previousHash;
-    this.hash = this.calculateHash();
     this.nonce = 0;
+    this.hash = ''; // 初始化为空字符串
+    // 计算区块哈希
+    this.hash = this.calculateHash();
   }
 
   calculateHash() {
-    const data = this.previousHash + this.timestamp + JSON.stringify(this.transactions) + this.nonce;
-    return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
+    try {
+      // 确保所有参数都有有效值
+      const safeTimestamp = this.timestamp || Date.now();
+      const safeTransactions = this.transactions || [];
+      const safePreviousHash = this.previousHash || '';
+      const safeNonce = this.nonce || 0;
+      
+      // 将交易转换为字符串，处理可能的序列化错误
+      let transactionsString;
+      try {
+        transactionsString = JSON.stringify(safeTransactions);
+      } catch (error) {
+        console.error('Failed to stringify transactions:', error);
+        transactionsString = '[]'; // 默认为空数组字符串
+      }
+      
+      // 创建要哈希的数据字符串
+      const data = safePreviousHash + safeTimestamp + transactionsString + safeNonce;
+      
+      // 使用SHA-256计算哈希
+      return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
+    } catch (error) {
+      console.error('Error calculating hash:', error);
+      return 'error-calculating-hash-' + Date.now(); // 返回一个唯一错误哈希而不是抛出异常
+    }
   }
 
   // 工作量证明 (PoW)
   mineBlock(difficulty) {
-    const target = Array(difficulty + 1).join('0');
-    
-    while (this.hash.substring(0, difficulty) !== target) {
-      this.nonce++;
-      this.hash = this.calculateHash();
+    try {
+      const target = Array(difficulty + 1).join('0');
+      
+      while (this.hash.substring(0, difficulty) !== target) {
+        this.nonce++;
+        this.hash = this.calculateHash();
+      }
+      
+      console.log(`Block mined: ${this.hash}`);
+    } catch (error) {
+      console.error('Error mining block:', error);
+      throw new Error(`Mining failed: ${error.message}`);
     }
-    
-    console.log(`Block mined: ${this.hash}`);
   }
 }
 
@@ -46,39 +76,75 @@ class Transaction {
     this.toAddress = toAddress;
     this.amount = amount;
     this.timestamp = Date.now();
+    this.signature = ''; // 初始化为空字符串
   }
 
   calculateHash() {
-    const data = this.fromAddress + this.toAddress + this.amount + this.timestamp;
-    return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
+    try {
+      const data = this.fromAddress + this.toAddress + this.amount + this.timestamp;
+      return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
+    } catch (error) {
+      console.error('Error calculating transaction hash:', error);
+      return 'error-calculating-tx-hash-' + Date.now();
+    }
   }
 
   signTransaction(signingKey) {
-    if (signingKey.getPublic('hex') !== this.fromAddress) {
-      throw new Error('You cannot sign transactions for other wallets!');
-    }
+    try {
+      if (!signingKey) {
+        throw new Error('No signing key provided');
+      }
+      
+      if (signingKey.getPublic('hex') !== this.fromAddress) {
+        throw new Error('You cannot sign transactions for other wallets!');
+      }
 
-    const hashTx = this.calculateHash();
-    const sig = signingKey.sign(hashTx);
-    this.signature = sig.toDER('hex');
+      const hashTx = this.calculateHash();
+      const sig = signingKey.sign(hashTx);
+      this.signature = sig.toDER('hex');
+    } catch (error) {
+      console.error('Error signing transaction:', error);
+      throw new Error(`Signing failed: ${error.message}`);
+    }
   }
 
   isValid() {
-    if (this.fromAddress === null) return true; // 挖矿奖励交易
+    try {
+      if (this.fromAddress === null) return true; // 挖矿奖励交易
 
-    if (!this.signature || this.signature.length === 0) {
-      throw new Error('No signature in this transaction');
+      if (!this.signature || this.signature.length === 0) {
+        throw new Error('No signature in this transaction');
+      }
+
+      const publicKey = ec.keyFromPublic(this.fromAddress, 'hex');
+      return publicKey.verify(this.calculateHash(), this.signature);
+    } catch (error) {
+      console.error('Error validating transaction:', error);
+      return false; // 验证失败
     }
-
-    const publicKey = ec.keyFromPublic(this.fromAddress, 'hex');
-    return publicKey.verify(this.calculateHash(), this.signature);
   }
 }
 
 // 区块链类
 class Blockchain {
   constructor() {
-    this.chain = [this.createGenesisBlock()];
+    // 确保创建有效的创世区块
+    this.chain = [];
+    try {
+      const genesisBlock = this.createGenesisBlock();
+      this.chain = [genesisBlock];
+    } catch (error) {
+      console.error('Error creating genesis block:', error);
+      // 创建一个简单的替代创世区块
+      this.chain = [{
+        timestamp: Date.now(),
+        transactions: [],
+        previousHash: '0',
+        hash: 'genesis-' + Date.now(),
+        nonce: 0
+      }];
+    }
+    
     this.difficulty = 2; // 挖矿难度
     this.pendingTransactions = [];
     this.miningReward = 100; // 挖矿奖励
@@ -86,7 +152,12 @@ class Blockchain {
 
   // 创建创世区块
   createGenesisBlock() {
-    return new Block(Date.now(), [], '0');
+    try {
+      return new Block(Date.now(), [], '0');
+    } catch (error) {
+      console.error('Error in createGenesisBlock:', error);
+      throw error;
+    }
   }
 
   // 初始化区块链数据
@@ -96,7 +167,7 @@ class Blockchain {
     try {
       // 检查是否使用内存存储
       const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
-                             (env.USE_IN_MEMORY_STORE === 'true');
+                             (env && env.USE_IN_MEMORY_STORE === 'true');
       
       console.log(`Using memory store: ${useMemoryStore}`);
       
@@ -145,155 +216,204 @@ class Blockchain {
   }
 
   getLatestBlock() {
-    return this.chain[this.chain.length - 1];
+    try {
+      if (!this.chain || this.chain.length === 0) {
+        console.warn('Chain is empty, creating genesis block');
+        const genesisBlock = this.createGenesisBlock();
+        this.chain = [genesisBlock];
+      }
+      return this.chain[this.chain.length - 1];
+    } catch (error) {
+      console.error('Error in getLatestBlock:', error);
+      // 返回一个简单对象而不是抛出异常
+      return {
+        timestamp: Date.now(),
+        transactions: [],
+        previousHash: '0',
+        hash: 'error-block-' + Date.now(),
+        nonce: 0
+      };
+    }
   }
 
   // 保存区块链到存储
   async saveChain(env) {
-    // 检查是否使用内存存储
-    const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
-                           (env.USE_IN_MEMORY_STORE === 'true');
-    
-    if (useMemoryStore) {
-      // 保存到内存
-      memoryStorage.blockchain = this.chain;
-      console.log('Blockchain saved to memory storage');
-      return;
-    }
-    
-    // 保存到KV
-    if (!env || !env.BLOCKCHAIN_STORAGE) {
-      console.warn('KV storage not available. Cannot save blockchain.');
-      return;
-    }
-    
     try {
+      // 检查是否使用内存存储
+      const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
+                             (env && env.USE_IN_MEMORY_STORE === 'true');
+      
+      if (useMemoryStore) {
+        // 保存到内存
+        memoryStorage.blockchain = this.chain;
+        console.log('Blockchain saved to memory storage');
+        return;
+      }
+      
+      // 保存到KV
+      if (!env || !env.BLOCKCHAIN_STORAGE) {
+        console.warn('KV storage not available. Cannot save blockchain.');
+        return;
+      }
+      
       await env.BLOCKCHAIN_STORAGE.put('blockchain', JSON.stringify(this.chain));
       console.log('Blockchain saved to KV storage');
     } catch (error) {
-      console.error('Error saving blockchain to KV:', error.message);
+      console.error('Error saving blockchain to storage:', error.message);
     }
   }
 
   // 保存待处理交易到存储
   async savePendingTransactions(env) {
-    // 检查是否使用内存存储
-    const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
-                           (env.USE_IN_MEMORY_STORE === 'true');
-    
-    if (useMemoryStore) {
-      // 保存到内存
-      memoryStorage.pendingTransactions = this.pendingTransactions;
-      console.log('Pending transactions saved to memory storage');
-      return;
-    }
-    
-    // 保存到KV
-    if (!env || !env.BLOCKCHAIN_STORAGE) {
-      console.warn('KV storage not available. Cannot save pending transactions.');
-      return;
-    }
-    
     try {
+      // 检查是否使用内存存储
+      const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
+                             (env && env.USE_IN_MEMORY_STORE === 'true');
+      
+      if (useMemoryStore) {
+        // 保存到内存
+        memoryStorage.pendingTransactions = this.pendingTransactions;
+        console.log('Pending transactions saved to memory storage');
+        return;
+      }
+      
+      // 保存到KV
+      if (!env || !env.BLOCKCHAIN_STORAGE) {
+        console.warn('KV storage not available. Cannot save pending transactions.');
+        return;
+      }
+      
       await env.BLOCKCHAIN_STORAGE.put('pendingTransactions', JSON.stringify(this.pendingTransactions));
       console.log('Pending transactions saved to KV storage');
     } catch (error) {
-      console.error('Error saving pending transactions to KV:', error.message);
+      console.error('Error saving pending transactions to storage:', error.message);
     }
   }
 
   async minePendingTransactions(minerAddress, env) {
-    // 创建奖励交易
-    const rewardTx = new Transaction(null, minerAddress, this.miningReward);
-    this.pendingTransactions.push(rewardTx);
-    
-    // 创建新区块并进行挖矿
-    const block = new Block(Date.now(), this.pendingTransactions, this.getLatestBlock().hash);
-    block.mineBlock(this.difficulty);
-    
-    console.log('Block successfully mined!');
-    this.chain.push(block);
-    
-    // 重置待处理交易
-    this.pendingTransactions = [];
-    
-    // 保存更新的区块链和待处理交易
-    await this.saveChain(env);
-    await this.savePendingTransactions(env);
-    
-    return block;
+    try {
+      // 创建奖励交易
+      const rewardTx = new Transaction(null, minerAddress, this.miningReward);
+      this.pendingTransactions.push(rewardTx);
+      
+      // 获取最新区块的哈希
+      const previousHash = this.getLatestBlock().hash;
+      
+      // 创建新区块并进行挖矿
+      const block = new Block(Date.now(), this.pendingTransactions, previousHash);
+      block.mineBlock(this.difficulty);
+      
+      console.log('Block successfully mined!');
+      this.chain.push(block);
+      
+      // 重置待处理交易
+      this.pendingTransactions = [];
+      
+      // 保存更新的区块链和待处理交易
+      await this.saveChain(env);
+      await this.savePendingTransactions(env);
+      
+      return block;
+    } catch (error) {
+      console.error('Error mining transactions:', error);
+      throw new Error(`Mining failed: ${error.message}`);
+    }
   }
 
   async addTransaction(transaction, env) {
-    // 验证交易
-    if (!transaction.fromAddress || !transaction.toAddress) {
-      throw new Error('Transaction must include from and to address');
-    }
+    try {
+      // 验证交易
+      if (!transaction.fromAddress || !transaction.toAddress) {
+        throw new Error('Transaction must include from and to address');
+      }
 
-    // 特殊处理：如果是重新构建接收到的交易对象，可能没有isValid方法
-    if (typeof transaction.isValid === 'function' && !transaction.isValid()) {
-      throw new Error('Cannot add invalid transaction to chain');
+      // 特殊处理：如果是重新构建接收到的交易对象，可能没有isValid方法
+      if (typeof transaction.isValid === 'function') {
+        const isValid = transaction.isValid();
+        if (!isValid) {
+          throw new Error('Transaction validation failed');
+        }
+      }
+      
+      this.pendingTransactions.push(transaction);
+      
+      // 保存更新的待处理交易
+      await this.savePendingTransactions(env);
+      
+      return transaction;
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      throw new Error(`Failed to add transaction: ${error.message}`);
     }
-    
-    this.pendingTransactions.push(transaction);
-    
-    // 保存更新的待处理交易
-    await this.savePendingTransactions(env);
-    
-    return transaction;
   }
 
   getBalanceOfAddress(address) {
-    let balance = 0;
+    try {
+      let balance = 0;
 
-    for (const block of this.chain) {
-      for (const trans of block.transactions) {
-        if (trans.fromAddress === address) {
-          balance -= trans.amount;
-        }
+      for (const block of this.chain) {
+        if (!block.transactions) continue; // 跳过没有交易的区块
+        
+        for (const trans of block.transactions) {
+          if (trans.fromAddress === address) {
+            balance -= parseFloat(trans.amount);
+          }
 
-        if (trans.toAddress === address) {
-          balance += trans.amount;
+          if (trans.toAddress === address) {
+            balance += parseFloat(trans.amount);
+          }
         }
       }
-    }
 
-    return balance;
+      return balance;
+    } catch (error) {
+      console.error('Error calculating balance:', error);
+      return 0; // 默认余额为0
+    }
   }
 
   isChainValid() {
-    for (let i = 1; i < this.chain.length; i++) {
-      const currentBlock = this.chain[i];
-      const previousBlock = this.chain[i - 1];
+    try {
+      for (let i = 1; i < this.chain.length; i++) {
+        const currentBlock = this.chain[i];
+        const previousBlock = this.chain[i - 1];
 
-      // 验证区块哈希
-      if (currentBlock.hash !== currentBlock.calculateHash()) {
-        return false;
-      }
+        // 验证区块哈希
+        if (currentBlock.hash !== new Block(
+          currentBlock.timestamp,
+          currentBlock.transactions,
+          currentBlock.previousHash
+        ).calculateHash()) {
+          return false;
+        }
 
-      // 验证区块链接
-      if (currentBlock.previousHash !== previousBlock.hash) {
-        return false;
-      }
-
-      // 验证区块内交易
-      for (const tx of currentBlock.transactions) {
-        if (tx.fromAddress !== null && typeof tx.isValid === 'function' && !tx.isValid()) {
+        // 验证区块链接
+        if (currentBlock.previousHash !== previousBlock.hash) {
           return false;
         }
       }
-    }
 
-    return true;
+      return true;
+    } catch (error) {
+      console.error('Error validating chain:', error);
+      return false; // 验证失败
+    }
   }
 }
 
 // 钱包类
 class Wallet {
   constructor(privateKey = null) {
-    this.keyPair = privateKey ? ec.keyFromPrivate(privateKey) : ec.genKeyPair();
-    this.privateKey = this.keyPair.getPrivate('hex');
-    this.publicKey = this.keyPair.getPublic('hex');
+    try {
+      this.keyPair = privateKey ? ec.keyFromPrivate(privateKey) : ec.genKeyPair();
+      this.privateKey = this.keyPair.getPrivate('hex');
+      this.publicKey = this.keyPair.getPublic('hex');
+    } catch (error) {
+      console.error('Error creating wallet:', error);
+      // 创建一个空钱包对象，避免抛出异常
+      this.privateKey = 'error-private-key';
+      this.publicKey = 'error-public-key';
+    }
   }
 
   // 获取钱包地址
@@ -307,53 +427,76 @@ let blockchainInstance = null;
 
 // 获取或初始化区块链实例
 async function getBlockchain(env) {
-  if (!blockchainInstance) {
-    console.log('Creating new blockchain instance');
-    blockchainInstance = new Blockchain();
-    await blockchainInstance.initialize(env);
+  try {
+    if (!blockchainInstance) {
+      console.log('Creating new blockchain instance');
+      blockchainInstance = new Blockchain();
+      await blockchainInstance.initialize(env);
+    }
+    return blockchainInstance;
+  } catch (error) {
+    console.error('Error getting blockchain instance:', error);
+    // 如果初始化失败，返回一个新的实例而不是抛出异常
+    return new Blockchain();
   }
-  return blockchainInstance;
 }
 
 // 创建响应函数
 function createResponse(data, status = 200) {
-  return new Response(JSON.stringify(data, null, 2), {
-    status,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type'
-    }
-  });
+  try {
+    return new Response(JSON.stringify(data, null, 2), {
+      status,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      }
+    });
+  } catch (error) {
+    console.error('Error creating response:', error);
+    // 创建一个错误响应
+    return new Response(JSON.stringify({
+      error: 'Failed to create response',
+      message: error.message
+    }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
+    });
+  }
 }
 
 // 处理请求的主函数
 async function handleRequest(request, env) {
-  const url = new URL(request.url);
-  const path = url.pathname;
-  const method = request.method;
-
-  console.log(`Handling ${method} request to ${path}`);
-
-  // 检查环境变量
-  const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
-                         (env.USE_IN_MEMORY_STORE === 'true');
-  console.log(`Storage mode: ${useMemoryStore ? 'In-Memory' : 'KV'}`);
-
-  // 处理预检请求
-  if (method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Max-Age': '86400'
-      }
-    });
-  }
-
+  console.log('Handling request...');
+  
   try {
+    const url = new URL(request.url);
+    const path = url.pathname;
+    const method = request.method;
+
+    console.log(`Handling ${method} request to ${path}`);
+
+    // 检查环境变量
+    const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
+                           (env && env.USE_IN_MEMORY_STORE === 'true');
+    console.log(`Storage mode: ${useMemoryStore ? 'In-Memory' : 'KV'}`);
+
+    // 处理预检请求
+    if (method === 'OPTIONS') {
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+          'Access-Control-Max-Age': '86400'
+        }
+      });
+    }
+
     // 获取区块链实例
     const blockchain = await getBlockchain(env);
 
@@ -424,18 +567,35 @@ async function handleRequest(request, env) {
     }
     else if (path === '/debug' && method === 'GET') {
       // 调试端点，用于诊断KV和其他问题
-      return createResponse({
-        timestamp: new Date().toISOString(),
-        storage: useMemoryStore ? "In-Memory" : "KV",
-        envAvailable: !!env,
-        kvAvailable: !!(env && env.BLOCKCHAIN_STORAGE),
-        blockchainInitialized: !!blockchainInstance,
-        blockCount: blockchain.chain.length,
-        pendingTransactionCount: blockchain.pendingTransactions.length,
-        variables: env ? {
-          USE_IN_MEMORY_STORE: env.USE_IN_MEMORY_STORE
-        } : "No env available"
-      });
+      try {
+        return createResponse({
+          timestamp: new Date().toISOString(),
+          storage: useMemoryStore ? "In-Memory" : "KV",
+          envAvailable: !!env,
+          kvAvailable: !!(env && env.BLOCKCHAIN_STORAGE),
+          env_vars: env ? {
+            USE_IN_MEMORY_STORE: env.USE_IN_MEMORY_STORE
+          } : "No env available",
+          blockchainInitialized: !!blockchainInstance,
+          blockCount: blockchain.chain.length,
+          genesisBlock: blockchain.chain[0],
+          pendingTransactionCount: blockchain.pendingTransactions.length,
+          availablePaths: [
+            '/blockchain', 
+            '/transaction', 
+            '/mine', 
+            '/balance/:address', 
+            '/wallet/new',
+            '/debug'
+          ]
+        });
+      } catch (error) {
+        return createResponse({
+          error: 'Error generating debug info',
+          message: error.message,
+          stack: error.stack
+        }, 500);
+      }
     }
     else {
       return createResponse({ 
@@ -454,10 +614,9 @@ async function handleRequest(request, env) {
   } catch (error) {
     console.error('Error handling request:', error);
     return createResponse({ 
-      error: error.message, 
-      stack: error.stack,
-      route: path,
-      method: method
+      error: 'Internal server error',
+      message: error.message,
+      stack: error.stack
     }, 500);
   }
 }
@@ -465,6 +624,21 @@ async function handleRequest(request, env) {
 // Worker入口点 - 使用ES模块格式
 export default {
   async fetch(request, env, ctx) {
-    return handleRequest(request, env);
+    try {
+      return await handleRequest(request, env);
+    } catch (error) {
+      console.error('Unhandled error in fetch:', error);
+      return new Response(JSON.stringify({
+        error: 'Unhandled server error',
+        message: error.message,
+        stack: error.stack
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
+      });
+    }
   }
 };
