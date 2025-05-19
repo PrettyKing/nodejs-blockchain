@@ -1,7 +1,10 @@
-// config.js - 区块链配置文件
-module.exports = {
+// config.js - 区块链配置文件 (Cloudflare Worker版本)
+
+// 使用ES模块导出
+export default {
   // 挖矿难度 (决定哈希值前导零的数量)
-  DIFFICULTY: 4,
+  // 对于Cloudflare Worker，我们设置较低的难度以避免超时
+  DIFFICULTY: 2,
   
   // 挖矿奖励 (单位: 代币)
   MINING_REWARD: 50,
@@ -12,12 +15,13 @@ module.exports = {
   // 难度调整间隔 (以区块数量计)
   DIFFICULTY_ADJUSTMENT_INTERVAL: 10,
   
-  // HTTP服务器端口
-  HTTP_PORT: process.env.HTTP_PORT || 3001,
+  // API版本
+  API_VERSION: 'v1',
   
-  // P2P服务器端口
-  P2P_PORT: process.env.P2P_PORT || 6001,
+  // 使用KV存储
+  // 可以通过环境变量配置是否使用KV
+  USE_KV_STORAGE: false, // 默认不使用KV
   
-  // 初始节点列表
-  PEERS: process.env.PEERS ? process.env.PEERS.split(',') : []
+  // 调试模式
+  DEBUG: true
 };
