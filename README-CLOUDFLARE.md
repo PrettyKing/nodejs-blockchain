@@ -2,6 +2,15 @@
 
 这个项目是一个使用 Cloudflare Workers 部署的完整区块链实现。它利用 Cloudflare 的 KV 存储来持久化区块链数据，并提供了一组 RESTful API 来与区块链交互。
 
+## 更新: 解决 Buffer 依赖问题
+
+最初的版本遇到了与 Node.js 特定模块（如 `buffer`）相关的依赖问题。我们已经通过以下更改解决了这些问题：
+
+1. 替换 `crypto-browserify` 为 `crypto-es`，这是一个专为浏览器环境设计的加密库
+2. 使用 ES 模块导入而不是 CommonJS `require` 语法
+3. 添加了 `nodejs_compat` 兼容性标志以增强 Worker 的 Node.js 兼容性
+4. 在 `package.json` 中添加了浏览器兼容性设置，排除了不兼容的 Node.js 模块
+
 ## 功能特点
 
 - 基于工作量证明(PoW)的共识机制
@@ -166,6 +175,22 @@ npm run publish
 const API_BASE_URL = 'https://blockchain-worker.your-subdomain.workers.dev';
 ```
 
+## 疑难解答
+
+### 常见问题
+
+1. **"Could not resolve 'buffer'" 错误**
+   - 这是因为Cloudflare Workers环境与Node.js不完全兼容
+   - 我们已经通过使用浏览器兼容库和添加兼容性标志解决了这个问题
+
+2. **执行超时**
+   - 默认情况下，Cloudflare Workers有CPU时间限制
+   - 考虑降低挖矿难度或者升级到付费计划以获得更长的执行时间
+
+3. **KV存储限制**
+   - 免费计划有KV操作次数和存储容量限制
+   - 监控使用情况，必要时升级
+
 ## 注意事项
 
 1. **资源限制**: Cloudflare Workers有执行时间限制，复杂计算（如难度较高的挖矿）可能会超时。考虑调低难度或优化算法。
@@ -175,19 +200,3 @@ const API_BASE_URL = 'https://blockchain-worker.your-subdomain.workers.dev';
 3. **安全性**: 在生产环境中，应考虑添加更严格的访问控制和身份验证。
 
 4. **CORS设置**: 当前配置允许所有源访问API。如果需要限制，请修改`createResponse`函数中的CORS头部。
-
-## 故障排除
-
-如果遇到问题，请检查:
-
-1. Cloudflare Workers错误日志
-2. KV命名空间配置是否正确
-3. 网络请求是否正确格式化
-4. 跨域请求问题
-
-## 进一步改进
-
-- 添加更复杂的共识算法
-- 实现智能合约功能
-- 添加用户身份验证
-- 优化存储结构，支持更大规模的区块链
