@@ -1,194 +1,202 @@
-# Node.js区块链项目
+# Cloudflare Worker 区块链部署
 
-一个使用Node.js实现的简单区块链和加密货币系统，包含完整的区块链核心、API服务器和钱包功能。
+这个项目是一个使用 Cloudflare Workers 部署的完整区块链实现。它利用 Cloudflare 的 KV 存储来持久化区块链数据，并提供了一组 RESTful API 来与区块链交互。
+
+## 更新: 解决 Buffer 依赖问题
+
+最初的版本遇到了与 Node.js 特定模块（如 `buffer`）相关的依赖问题。我们已经通过以下更改解决了这些问题：
+
+1. 替换 `crypto-browserify` 为 `crypto-es`，这是一个专为浏览器环境设计的加密库
+2. 使用 ES 模块导入而不是 CommonJS `require` 语法
+3. 添加了 `nodejs_compat` 兼容性标志以增强 Worker 的 Node.js 兼容性
+4. 在 `package.json` 中添加了浏览器兼容性设置，排除了不兼容的 Node.js 模块
 
 ## 功能特点
 
 - 基于工作量证明(PoW)的共识机制
-- 交易创建和验证
-- 区块挖掘
-- 加密钱包管理
-- RESTful API接口
-- P2P网络通信
+- 完整的交易处理和验证
+- 使用椭圆曲线加密的钱包实现
+- 区块挖掘功能
+- 持久化存储使用 Cloudflare KV
+- 全球分布式部署
 
-## 技术栈
+## 部署步骤
 
-- **Node.js** - 运行环境
-- **Express** - Web服务器框架
-- **Elliptic** - 椭圆曲线加密
-- **WebSocket** - P2P通信
+### 准备工作
 
-## 项目结构
+1. **Cloudflare 账户设置**:
+   - 注册一个 [Cloudflare 账户](https://dash.cloudflare.com/sign-up)
+   - 确保你的账户有 Workers 权限
 
-```
-blockchain-nodejs/
-├── blockchain.js      # 区块链核心实现
-├── config.js          # 配置文件
-├── index.js           # 主入口文件
-├── p2p-server.js      # P2P网络服务器
-├── server.js          # API服务器
-├── wallet.js          # 钱包实现
-└── package.json       # 项目依赖
-```
+2. **安装 Wrangler CLI**:
+   ```bash
+   npm install -g wrangler
+   ```
 
-## 快速开始
+3. **登录 Wrangler**:
+   ```bash
+   wrangler login
+   ```
 
-### 安装依赖
+### 创建 KV 命名空间
 
-```bash
-# 安装所有依赖，包括cross-env用于跨平台兼容
-npm install
-```
+1. **创建用于存储区块链数据的 KV 命名空间**:
+   ```bash
+   wrangler kv:namespace create "BLOCKCHAIN_STORAGE"
+   ```
 
-### 启动单节点
+2. **创建用于预览环境的 KV 命名空间**:
+   ```bash
+   wrangler kv:namespace create "BLOCKCHAIN_STORAGE" --preview
+   ```
 
-```bash
-npm start
-```
+3. **记下 KV 命名空间 ID 和预览 ID**，然后更新 `wrangler.toml` 文件，替换 `your-kv-id-will-go-here` 和 `your-preview-kv-id-will-go-here` 为实际值:
+   ```toml
+   kv_namespaces = [
+     { binding = "BLOCKCHAIN_STORAGE", id = "实际KV ID", preview_id = "实际预览KV ID" }
+   ]
+   ```
 
-### 启动多个节点
+### 本地开发和测试
 
-#### 在Windows系统上:
+1. **安装项目依赖**:
+   ```bash
+   npm install
+   ```
 
-```bash
-# 启动第一个节点
-npm start
+2. **启动开发服务器**:
+   ```bash
+   npm run dev
+   ```
 
-# 在新终端启动第二个节点
-npm run node2-win
+   这将在本地启动一个开发服务器，通常在 `http://localhost:8787`。
 
-# 在另一个终端启动第三个节点
-npm run node3-win
-```
+3. **测试API端点**:
+   - 获取区块链: `GET http://localhost:8787/blockchain`
+   - 创建钱包: `GET http://localhost:8787/wallet/new`
+   - 创建交易: `POST http://localhost:8787/transaction`
+   - 挖矿: `POST http://localhost:8787/mine`
+   - 获取余额: `GET http://localhost:8787/balance/{address}`
 
-#### 在Linux/Mac系统上:
+### 部署到 Cloudflare
 
-```bash
-# 启动第一个节点
-npm start
-
-# 在新终端启动第二个节点
-npm run node2-unix
-
-# 在另一个终端启动第三个节点
-npm run node3-unix
-```
-
-#### 使用cross-env(推荐，适用于所有系统):
+完成测试后，可以将Worker部署到Cloudflare全球网络:
 
 ```bash
-# 安装cross-env
-npm install cross-env -g
-
-# 启动第一个节点
-npm start
-
-# 在新终端启动第二个节点
-npm run node2
-
-# 在另一个终端启动第三个节点
-npm run node3
+npm run publish
 ```
 
-## API接口
+这将把你的区块链部署到Cloudflare的全球网络，并提供一个类似 `https://blockchain-worker.your-subdomain.workers.dev` 的URL。
 
-### 查看区块链
+## API 文档
 
-```
-GET /blockchain
-```
+### 获取区块链
 
-### 创建交易
-
-```
-POST /transaction
-Content-Type: application/json
-
-{
-  "fromAddress": "公钥1",
-  "toAddress": "公钥2",
-  "amount": 50,
-  "privateKey": "私钥1"
-}
-```
-
-### 挖矿
-
-```
-POST /mine
-Content-Type: application/json
-
-{
-  "minerAddress": "矿工公钥"
-}
-```
-
-### 查询余额
-
-```
-GET /balance/:address
-```
-
-### 创建钱包
-
-```
-GET /wallet/new
-```
-
-## 钱包命令行工具
+- **URL**: `/blockchain`
+- **方法**: `GET`
+- **成功响应**:
+  ```json
+  {
+    "chain": [...],
+    "pendingTransactions": [...],
+    "length": 1
+  }
+  ```
 
 ### 创建新钱包
 
-```bash
-node wallet.js new [钱包名称]
+- **URL**: `/wallet/new`
+- **方法**: `GET`
+- **成功响应**:
+  ```json
+  {
+    "privateKey": "钱包私钥",
+    "publicKey": "钱包公钥(地址)"
+  }
+  ```
+
+### 创建交易
+
+- **URL**: `/transaction`
+- **方法**: `POST`
+- **请求体**:
+  ```json
+  {
+    "fromAddress": "发送方钱包地址",
+    "toAddress": "接收方钱包地址",
+    "amount": 10,
+    "privateKey": "发送方私钥"
+  }
+  ```
+- **成功响应**:
+  ```json
+  {
+    "message": "Transaction added successfully",
+    "transaction": {...}
+  }
+  ```
+
+### 挖矿
+
+- **URL**: `/mine`
+- **方法**: `POST`
+- **请求体**:
+  ```json
+  {
+    "minerAddress": "矿工钱包地址"
+  }
+  ```
+- **成功响应**:
+  ```json
+  {
+    "message": "Block mined successfully",
+    "lastBlock": {...}
+  }
+  ```
+
+### 查询余额
+
+- **URL**: `/balance/{walletAddress}`
+- **方法**: `GET`
+- **成功响应**:
+  ```json
+  {
+    "address": "钱包地址",
+    "balance": 100
+  }
+  ```
+
+## 与前端集成
+
+更新前端应用的API URL，指向你的Worker URL:
+
+```typescript
+// 在src/api/index.ts中
+const API_BASE_URL = 'https://blockchain-worker.your-subdomain.workers.dev';
 ```
 
-### 列出所有钱包
+## 疑难解答
 
-```bash
-node wallet.js list
-```
+### 常见问题
 
-### 查看钱包信息
+1. **"Could not resolve 'buffer'" 错误**
+   - 这是因为Cloudflare Workers环境与Node.js不完全兼容
+   - 我们已经通过使用浏览器兼容库和添加兼容性标志解决了这个问题
 
-```bash
-node wallet.js info <钱包名称>
-```
+2. **执行超时**
+   - 默认情况下，Cloudflare Workers有CPU时间限制
+   - 考虑降低挖矿难度或者升级到付费计划以获得更长的执行时间
 
-## 常见问题解决
+3. **KV存储限制**
+   - 免费计划有KV操作次数和存储容量限制
+   - 监控使用情况，必要时升级
 
-### Windows环境变量问题
+## 注意事项
 
-如果在Windows系统中遇到`'HTTP_PORT' 不是内部或外部命令，也不是可运行的程序或批处理文件`错误，请使用以下命令之一:
+1. **资源限制**: Cloudflare Workers有执行时间限制，复杂计算（如难度较高的挖矿）可能会超时。考虑调低难度或优化算法。
 
-```bash
-# 使用Windows专用脚本
-npm run node2-win
+2. **KV存储限制**: 免费版本有存储和操作数量限制，监控使用情况。
 
-# 或者安装并使用cross-env(推荐)
-npm install cross-env -g
-npm run node2
-```
+3. **安全性**: 在生产环境中，应考虑添加更严格的访问控制和身份验证。
 
-## 开发
-
-```bash
-# 使用nodemon启动开发模式
-npm run dev
-```
-
-## 测试
-
-```bash
-npm test
-```
-
-## 延伸阅读
-
-- [区块链原理](https://en.wikipedia.org/wiki/Blockchain)
-- [比特币白皮书](https://bitcoin.org/bitcoin.pdf)
-- [椭圆曲线加密](https://en.wikipedia.org/wiki/Elliptic-curve_cryptography)
-
-## 许可证
-
-本项目采用MIT许可证，详情见[LICENSE](LICENSE)文件。
+4. **CORS设置**: 当前配置允许所有源访问API。如果需要限制，请修改`createResponse`函数中的CORS头部。
