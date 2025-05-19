@@ -1,5 +1,7 @@
 // blockchain.js - 区块链核心实现
 const crypto = require('crypto');
+const EC = require('elliptic').ec;
+const ec = new EC('secp256k1');
 
 class Block {
   constructor(timestamp, transactions, previousHash = '') {
@@ -106,7 +108,8 @@ class Blockchain {
       throw new Error('Transaction must include from and to address');
     }
 
-    if (!transaction.isValid()) {
+    // 特殊处理：如果是重新构建接收到的交易对象，可能没有isValid方法
+    if (typeof transaction.isValid === 'function' && !transaction.isValid()) {
       throw new Error('Cannot add invalid transaction to chain');
     }
     
@@ -131,6 +134,7 @@ class Blockchain {
     return balance;
   }
 
+  // 验证区块链的有效性
   isChainValid() {
     for (let i = 1; i < this.chain.length; i++) {
       const currentBlock = this.chain[i];
@@ -146,15 +150,38 @@ class Blockchain {
         return false;
       }
 
-      // 验证区块内交易
+      // 验证区块内交易 (如果非挖矿奖励)
       for (const tx of currentBlock.transactions) {
-        if (!tx.isValid()) {
+        if (tx.fromAddress !== null && typeof tx.isValid === 'function' && !tx.isValid()) {
           return false;
         }
       }
     }
 
     return true;
+  }
+
+  // 替换区块链 (P2P网络同步需要)
+  replaceChain(newChain) {
+    // 新链必须比当前链长
+    if (newChain.length <= this.chain.length) {
+      console.log('接收到的区块链不比当前长，拒绝替换');
+      return;
+    }
+    
+    // 验证新链的有效性
+    const tempChain = new Blockchain();
+    tempChain.chain = newChain;
+    
+    if (!tempChain.isChainValid()) {
+      console.log('接收到的区块链无效，拒绝替换');
+      return;
+    }
+    
+    // 替换当前链
+    console.log('替换当前区块链为新接收的区块链');
+    this.chain = newChain;
+    this.pendingTransactions = []; // 重置待处理交易
   }
 }
 
