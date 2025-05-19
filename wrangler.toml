@@ -1,8 +1,16 @@
 name = "blockchain-worker"
 main = "worker.js"
 compatibility_date = "2023-09-04"
+compatibility_flags = ["nodejs_compat"]
 
 # 添加KV命名空间来存储区块链数据
 kv_namespaces = [
   { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-will-go-here", preview_id = "your-preview-kv-id-will-go-here" }
 ]
+
+# 增加Cloudflare Worker的CPU时间限制，以支持挖矿操作
+[build]
+  command = "npm install"
+
+[triggers]
+  crons = []
