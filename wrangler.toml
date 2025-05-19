@@ -1,37 +1,31 @@
-name = "nodejs-blockchain"
-main = "worker.js"
-compatibility_date = "2025-05-19"
-compatibility_flags = [ "nodejs_compat" ]
+name = "blockchain-api"
+main = "cloudflare-worker.js"
+compatibility_date = "2023-01-01"
 
-[vars]
-DIFFICULTY = "2"
-MINING_REWARD = "100"
-
-# 定义KV存储 - 用于持久化区块链数据
+# KV命名空间配置
+# 运行 wrangler kv:namespace create "BLOCKCHAIN_KV" 获取ID
+# 然后将下面的YOUR_NAMESPACE_ID替换为实际ID
 kv_namespaces = [
-  { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-here" }
+  { binding = "BLOCKCHAIN_KV", id = "YOUR_NAMESPACE_ID" }
 ]
 
-# 定义一个Durable Object - 用于存储区块链状态
-[durable_objects]
-bindings = [
-  { name = "BLOCKCHAIN", class_name = "BlockchainObject" }
-]
+# 资源配置
+[vars]
+DIFFICULTY = "2"  # 默认挖矿难度
 
-[[migrations]]
-tag = "v1"
-new_classes = ["BlockchainObject"]
+# 开发环境配置
+[env.dev]
+name = "blockchain-api-dev"
+# 开发环境可以使用较低的挖矿难度
+[env.dev.vars]
+DIFFICULTY = "1"
 
-# 设置CORS头，允许任何源进行请求
-[routes]
-pattern = "*/*"
-script = "worker.js"
+# 生产环境配置
+[env.production]
+name = "blockchain-api"
+# 路由配置，如果您有自定义域名
+# route = { pattern = "api.yourdomain.com/blockchain/*", zone_id = "your-zone-id" }
 
-# 部署在Workers.dev子域名上
-workers_dev = true
-
-# 可选：指定自定义域名
-# [env.production]
-# routes = [
-#   { pattern = "api.your-domain.com", custom_domain = true }
-# ]
+# 触发器配置，可以添加定时任务
+[triggers]
+crons = []
