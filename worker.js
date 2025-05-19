@@ -72,49 +72,81 @@ class Transaction {
 // 区块链类
 class Blockchain {
   constructor() {
-    this.chain = [];
+    this.chain = [this.createGenesisBlock()];
     this.difficulty = 2; // 挖矿难度
     this.pendingTransactions = [];
     this.miningReward = 100; // 挖矿奖励
   }
 
-  // 初始化创世区块
+  // 创建创世区块
+  createGenesisBlock() {
+    return new Block(Date.now(), [], '0');
+  }
+
+  // 初始化区块链数据
   async initialize(env) {
-    // 检查KV存储中是否已有区块链数据
-    const storedChain = await env.BLOCKCHAIN_STORAGE.get('blockchain', { type: 'json' });
-    const storedPendingTx = await env.BLOCKCHAIN_STORAGE.get('pendingTransactions', { type: 'json' });
-    
-    if (storedChain && storedChain.length > 0) {
-      this.chain = storedChain;
-      console.log('Loaded existing blockchain with', this.chain.length, 'blocks');
-    } else {
-      // 创建创世区块
-      const genesisBlock = new Block(Date.now(), [], '0');
-      this.chain = [genesisBlock];
-      await this.saveChain(env);
-      console.log('Initialized new blockchain with genesis block');
-    }
-    
-    if (storedPendingTx) {
-      this.pendingTransactions = storedPendingTx;
-      console.log('Loaded', this.pendingTransactions.length, 'pending transactions');
-    }
-  }
+    try {
+      // 检查是否可以使用KV存储
+      if (!env || !env.BLOCKCHAIN_STORAGE) {
+        console.warn('KV storage not available. Using in-memory blockchain only.');
+        return;
+      }
 
-  // 保存区块链到KV存储
-  async saveChain(env) {
-    await env.BLOCKCHAIN_STORAGE.put('blockchain', JSON.stringify(this.chain));
-    console.log('Blockchain saved to KV storage');
-  }
+      // 尝试从KV读取区块链数据
+      const storedChain = await env.BLOCKCHAIN_STORAGE.get('blockchain', { type: 'json' });
+      if (storedChain && Array.isArray(storedChain) && storedChain.length > 0) {
+        this.chain = storedChain;
+        console.log(`Loaded blockchain with ${this.chain.length} blocks from KV`);
+      } else {
+        // 如果没有存储的区块链，使用创世区块并保存
+        await this.saveChain(env);
+        console.log('Initialized new blockchain with genesis block');
+      }
 
-  // 保存待处理交易到KV存储
-  async savePendingTransactions(env) {
-    await env.BLOCKCHAIN_STORAGE.put('pendingTransactions', JSON.stringify(this.pendingTransactions));
-    console.log('Pending transactions saved to KV storage');
+      // 尝试从KV读取待处理交易
+      const storedTx = await env.BLOCKCHAIN_STORAGE.get('pendingTransactions', { type: 'json' });
+      if (storedTx && Array.isArray(storedTx)) {
+        this.pendingTransactions = storedTx;
+        console.log(`Loaded ${this.pendingTransactions.length} pending transactions from KV`);
+      }
+    } catch (error) {
+      console.error('Error initializing from KV:', error.message);
+      // 已经在构造函数中初始化了创世区块，所以这里不需要额外处理
+    }
   }
 
   getLatestBlock() {
     return this.chain[this.chain.length - 1];
+  }
+
+  // 保存区块链到KV存储
+  async saveChain(env) {
+    if (!env || !env.BLOCKCHAIN_STORAGE) {
+      console.warn('KV storage not available. Cannot save blockchain.');
+      return;
+    }
+    
+    try {
+      await env.BLOCKCHAIN_STORAGE.put('blockchain', JSON.stringify(this.chain));
+      console.log('Blockchain saved to KV storage');
+    } catch (error) {
+      console.error('Error saving blockchain to KV:', error.message);
+    }
+  }
+
+  // 保存待处理交易到KV存储
+  async savePendingTransactions(env) {
+    if (!env || !env.BLOCKCHAIN_STORAGE) {
+      console.warn('KV storage not available. Cannot save pending transactions.');
+      return;
+    }
+    
+    try {
+      await env.BLOCKCHAIN_STORAGE.put('pendingTransactions', JSON.stringify(this.pendingTransactions));
+      console.log('Pending transactions saved to KV storage');
+    } catch (error) {
+      console.error('Error saving pending transactions to KV:', error.message);
+    }
   }
 
   async minePendingTransactions(minerAddress, env) {
@@ -217,11 +249,17 @@ class Wallet {
   }
 }
 
-// 为每个请求创建并初始化一个区块链实例
+// 全局区块链实例
+let blockchainInstance = null;
+
+// 获取或初始化区块链实例
 async function getBlockchain(env) {
-  const blockchain = new Blockchain();
-  await blockchain.initialize(env);
-  return blockchain;
+  if (!blockchainInstance) {
+    console.log('Creating new blockchain instance');
+    blockchainInstance = new Blockchain();
+    await blockchainInstance.initialize(env);
+  }
+  return blockchainInstance;
 }
 
 // 创建响应函数
@@ -243,6 +281,15 @@ async function handleRequest(request, env) {
   const path = url.pathname;
   const method = request.method;
 
+  console.log(`Handling ${method} request to ${path}`);
+
+  // 检查环境变量
+  if (!env) {
+    console.warn('Environment object is undefined');
+  } else if (!env.BLOCKCHAIN_STORAGE) {
+    console.warn('BLOCKCHAIN_STORAGE binding is undefined');
+  }
+
   // 处理预检请求
   if (method === 'OPTIONS') {
     return new Response(null, {
@@ -255,10 +302,10 @@ async function handleRequest(request, env) {
     });
   }
 
-  // 获取区块链实例
-  const blockchain = await getBlockchain(env);
-
   try {
+    // 获取区块链实例
+    const blockchain = await getBlockchain(env);
+
     // 路由处理
     if (path === '/blockchain' && method === 'GET') {
       // 获取区块链
@@ -324,16 +371,33 @@ async function handleRequest(request, env) {
         publicKey: newWallet.publicKey
       });
     }
+    else if (path === '/debug' && method === 'GET') {
+      // 调试端点，用于诊断KV和其他问题
+      return createResponse({
+        envAvailable: !!env,
+        kvAvailable: !!(env && env.BLOCKCHAIN_STORAGE),
+        blockchainInitialized: !!blockchainInstance,
+        blockCount: blockchain.chain.length,
+        pendingTransactionCount: blockchain.pendingTransactions.length
+      });
+    }
     else {
-      return createResponse({ error: 'Not found' }, 404);
+      return createResponse({ error: 'Not found', path: path }, 404);
     }
   } catch (error) {
     console.error('Error handling request:', error);
-    return createResponse({ error: error.message }, 500);
+    return createResponse({ 
+      error: error.message, 
+      stack: error.stack,
+      route: path,
+      method: method
+    }, 500);
   }
 }
 
 // Worker入口点
-addEventListener('fetch', event => {
-  event.respondWith(handleRequest(event.request, event.env));
-});
+export default {
+  async fetch(request, env, ctx) {
+    return handleRequest(request, env);
+  }
+};
