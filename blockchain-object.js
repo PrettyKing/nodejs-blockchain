@@ -40,32 +40,24 @@ export class BlockchainObject {
     // 等待初始化完成
     await this.initializePromise;
     
-    // 解析请求
-    const url = new URL(request.url);
-    const path = url.pathname;
-    
-    // CORS头
-    const headers = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
-      'Content-Type': 'application/json'
-    };
-    
-    // 处理预检请求
-    if (request.method === 'OPTIONS') {
-      return new Response(null, { headers });
-    }
-    
     try {
+      // 解析请求
+      const url = new URL(request.url);
+      const path = url.pathname;
+      
+      // 处理预检请求
+      if (request.method === 'OPTIONS') {
+        return this.handleCors(request);
+      }
+      
       // 路由请求
       if (path === '/blockchain' && request.method === 'GET') {
         // 获取整个区块链
-        return new Response(JSON.stringify({
+        return this.corsResponse(JSON.stringify({
           chain: this.blockchain.chain,
           pendingTransactions: this.blockchain.pendingTransactions,
           length: this.blockchain.chain.length
-        }), { headers });
+        }));
       }
       else if (path === '/transaction' && request.method === 'POST') {
         // 创建新交易
@@ -86,10 +78,10 @@ export class BlockchainObject {
         // 保存区块链状态
         await this.saveBlockchain();
         
-        return new Response(JSON.stringify({ 
+        return this.corsResponse(JSON.stringify({ 
           message: 'Transaction added successfully',
           transaction: tx
-        }), { headers });
+        }));
       }
       else if (path === '/mine' && request.method === 'POST') {
         // 挖矿
@@ -97,12 +89,9 @@ export class BlockchainObject {
         const { minerAddress } = data;
         
         if (!minerAddress) {
-          return new Response(JSON.stringify({ 
+          return this.corsResponse(JSON.stringify({ 
             error: 'Missing miner address' 
-          }), { 
-            status: 400, 
-            headers 
-          });
+          }), { status: 400 });
         }
         
         // 挖掘待处理交易
@@ -111,38 +100,72 @@ export class BlockchainObject {
         // 保存区块链状态
         await this.saveBlockchain();
         
-        return new Response(JSON.stringify({
+        return this.corsResponse(JSON.stringify({
           message: 'Block mined successfully',
           lastBlock: newBlock
-        }), { headers });
+        }));
       }
       else if (path.startsWith('/balance/') && request.method === 'GET') {
         // 获取钱包余额
         const address = path.split('/balance/')[1];
         const balance = this.blockchain.getBalanceOfAddress(address);
         
-        return new Response(JSON.stringify({ 
+        return this.corsResponse(JSON.stringify({ 
           address,
           balance
-        }), { headers });
+        }));
       }
       else {
-        return new Response(JSON.stringify({ 
+        return this.corsResponse(JSON.stringify({ 
           error: 'Not Found' 
-        }), { 
-          status: 404, 
-          headers 
-        });
+        }), { status: 404 });
       }
     } catch (error) {
       console.error('处理请求时出错:', error);
       
-      return new Response(JSON.stringify({ 
+      return this.corsResponse(JSON.stringify({ 
         error: error.message 
-      }), { 
-        status: 500, 
-        headers 
-      });
+      }), { status: 500 });
     }
+  }
+
+  // 处理CORS预检请求
+  handleCors(request) {
+    // 获取请求的Origin
+    const origin = request.headers.get('Origin') || '*';
+    
+    // 检查是否包含请求方法和请求头
+    const accessControlRequestMethod = request.headers.get('Access-Control-Request-Method');
+    const accessControlRequestHeaders = request.headers.get('Access-Control-Request-Headers');
+    
+    // 构建响应头
+    const headers = {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': accessControlRequestHeaders || 'Content-Type, Authorization',
+      'Access-Control-Max-Age': '86400', // 24小时
+    };
+    
+    return new Response(null, { 
+      status: 204, // No Content
+      headers 
+    });
+  }
+
+  // 创建带CORS头的响应
+  corsResponse(body, options = {}) {
+    const { status = 200, headers = {} } = options;
+    const origin = headers['Origin'] || '*';
+    
+    return new Response(body, {
+      status,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        ...headers
+      }
+    });
   }
 }
