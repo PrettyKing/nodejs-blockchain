@@ -33,6 +33,7 @@ class Block {
       
       // 将交易转换为字符串，处理可能的序列化错误
       let transactionsString;
+      console.log('===========>Transactions:', safeTransactions); // 调试输出
       try {
         transactionsString = JSON.stringify(safeTransactions);
       } catch (error) {
@@ -40,11 +41,11 @@ class Block {
         transactionsString = '[]'; // 默认为空数组字符串
       }
       
-      // 创建要哈希的数据字符串
+      // // 创建要哈希的数据字符串
       const data = safePreviousHash + safeTimestamp + transactionsString + safeNonce;
-      
       // 使用SHA-256计算哈希
-      return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
+      // return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
+      return CryptoES.default.SHA256(data).toString(CryptoES.default.enc.Hex);
     } catch (error) {
       console.error('Error calculating hash:', error);
       return 'error-calculating-hash-' + Date.now(); // 返回一个唯一错误哈希而不是抛出异常
@@ -82,7 +83,7 @@ class Transaction {
   calculateHash() {
     try {
       const data = this.fromAddress + this.toAddress + this.amount + this.timestamp;
-      return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
+      return CryptoES.default.SHA256(data).toString(CryptoES.default.enc.Hex);
     } catch (error) {
       console.error('Error calculating transaction hash:', error);
       return 'error-calculating-tx-hash-' + Date.now();

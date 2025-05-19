@@ -15,6 +15,9 @@ USE_IN_MEMORY_STORE = "true"
 # kv_namespaces = [
 #   { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-will-go-here", preview_id = "your-preview-kv-id-will-go-here" }
 # ]
+kv_namespaces = [
+ { binding = "BLOCKCHAIN_STORAGE", id = "9e776e0d217d403a8dc34a9104c9a7e6", preview_id = "dc6ca99fe05e413eb0882d0ca1e2dc6b" }
+]
 
 # 增加Cloudflare Worker的CPU时间限制，以支持挖矿操作
 [build]
