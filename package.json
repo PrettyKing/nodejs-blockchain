@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A blockchain implementation deployed as a Cloudflare Worker",
   "main": "worker.js",
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "publish": "wrangler publish"
@@ -17,6 +18,7 @@
   "browser": {
     "crypto": false,
     "buffer": false,
-    "stream": false
+    "stream": false,
+    "ws": false
   }
 }
