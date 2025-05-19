@@ -1,106 +1,52 @@
-// p2p-server.js - 区块链P2P网络服务器
-const WebSocket = require('ws');
-const config = require('./config');
-const { Transaction } = require('./blockchain');
+// p2p-server.js - HTTP-only服务器
+// 在Cloudflare Workers环境中，我们不使用WebSocket进行P2P通信
+// 相反，我们使用HTTP API和KV存储来维护区块链状态
+
+// 这是一个最小化版本，仅用于保持API兼容性
 
 class P2pServer {
   constructor(blockchain) {
     this.blockchain = blockchain;
-    this.sockets = [];
+    console.warn('P2P服务器功能在Cloudflare Workers环境中不可用');
+    console.warn('区块链状态通过KV存储同步，不使用WebSocket');
   }
 
-  // 初始化P2P服务器
+  // 这些方法都是空操作，只是为了保持接口兼容性
   listen() {
-    const server = new WebSocket.Server({ port: config.P2P_PORT });
-    server.on('connection', socket => this.connectSocket(socket));
-    
-    this.connectToPeers();
-    
-    console.log(`监听P2P连接，端口: ${config.P2P_PORT}`);
+    console.log('P2P服务器(WebSocket)功能已禁用，使用HTTP API代替');
   }
 
-  // 连接到初始节点
   connectToPeers() {
-    config.PEERS.forEach(peer => {
-      const socket = new WebSocket(peer);
-      socket.on('open', () => this.connectSocket(socket));
-    });
+    // 空操作
   }
 
-  // 处理新连接
-  connectSocket(socket) {
-    this.sockets.push(socket);
-    console.log('Socket connected');
-    
-    this.messageHandler(socket);
-    this.sendChain(socket);
+  connectSocket() {
+    // 空操作
   }
 
-  // 消息处理
-  messageHandler(socket) {
-    socket.on('message', message => {
-      try {
-        const data = JSON.parse(message);
-        
-        switch(data.type) {
-          case 'CHAIN':
-            console.log('收到新的区块链数据');
-            this.blockchain.replaceChain(data.chain);
-            break;
-          case 'TRANSACTION':
-            console.log('收到新的交易');
-            // 重建交易对象以确保它有所有正确的方法
-            const transaction = this.createTransactionFromData(data.transaction);
-            this.blockchain.addTransaction(transaction);
-            break;
-          default:
-            console.log('收到未知类型的消息');
-        }
-      } catch (error) {
-        console.error('处理消息时出错:', error.message);
-      }
-    });
+  messageHandler() {
+    // 空操作
   }
 
-  // 从接收到的数据创建交易对象
   createTransactionFromData(transactionData) {
-    const transaction = new Transaction(
-      transactionData.fromAddress,
-      transactionData.toAddress,
-      transactionData.amount
-    );
-    
-    // 复制其他属性
-    transaction.timestamp = transactionData.timestamp;
-    transaction.signature = transactionData.signature;
-    
-    return transaction;
+    // 返回原始数据，不进行处理
+    return transactionData;
   }
 
-  // 发送区块链数据
-  sendChain(socket) {
-    socket.send(JSON.stringify({ 
-      type: 'CHAIN', 
-      chain: this.blockchain.chain 
-    }));
+  sendChain() {
+    // 空操作
   }
 
-  // 广播区块链更新
   syncChains() {
-    this.sockets.forEach(socket => {
-      this.sendChain(socket);
-    });
+    console.log('同步区块链 (空操作)');
+    // 在Cloudflare Worker中，区块链通过KV存储自动同步
   }
 
-  // 广播交易
   broadcastTransaction(transaction) {
-    this.sockets.forEach(socket => {
-      socket.send(JSON.stringify({
-        type: 'TRANSACTION',
-        transaction
-      }));
-    });
+    console.log('广播交易 (空操作)');
+    // 在Cloudflare Worker中，交易通过KV存储自动同步
   }
 }
 
-module.exports = P2pServer;
+// 使用ES模块导出
+export default P2pServer;
