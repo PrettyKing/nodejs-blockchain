@@ -1,0 +1,24 @@
+name = "blockchain-api"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+WORKER_ENVIRONMENT = "production"
+
+# 路由配置 - 在部署时需要指定
+# 例如：example.com/*、api.example.com/* 或 blockchain-api.example.workers.dev
+
+[[kv_namespaces]]
+binding = "BLOCKCHAIN_STORAGE"
+id = "your-kv-namespace-id"  # 需要在Cloudflare控制台创建并替换这个ID
+
+# 允许更大的计算时间，因为挖矿可能需要较长时间
+[triggers]
+crons = []
+
+[build]
+command = "npm install"
+watch_dir = "."
+
+[env.production]
+workers_dev = true
