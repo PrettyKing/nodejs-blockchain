@@ -1,0 +1,22 @@
+name = "nodejs-blockchain"
+main = "worker.js"
+compatibility_date = "2025-05-19"
+
+[vars]
+DIFFICULTY = "2"
+MINING_REWARD = "100"
+
+# 定义KV存储 - 用于持久化区块链数据
+kv_namespaces = [
+  { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-here", preview_id = "your-preview-kv-id-here" }
+]
+
+# 定义一个Durable Object - 用于存储区块链状态
+[durable_objects]
+bindings = [
+  { name = "BLOCKCHAIN", class_name = "BlockchainObject" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["BlockchainObject"]
