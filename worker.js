@@ -1,22 +1,76 @@
-// worker.js - Cloudflare Worker版区块链服务
+// worker.js - Cloudflare Worker版区块链服务 (带KV存储)
 const { Blockchain, Transaction, Block } = require('./blockchain');
+const { loadBlockchain, saveBlockchain, loadWallet, saveWallet } = require('./storage');
 
-// 内存中存储区块链状态 (注意：Worker重启后会丢失)
-let blockchain;
-let wallet;
+// 内存缓存
+let blockchainCache = null;
+let walletCache = null;
 
 // 初始化区块链和钱包
-function initBlockchain() {
-  if (!blockchain) {
-    blockchain = new Blockchain();
-    // 为演示目的创建一个静态钱包
-    wallet = {
+async function initBlockchain(env) {
+  // 如果已有缓存，直接返回
+  if (blockchainCache && walletCache) {
+    return { blockchain: blockchainCache, wallet: walletCache };
+  }
+
+  try {
+    // 尝试从KV加载区块链数据
+    const loadedBlockchainData = await loadBlockchain(env);
+    
+    if (loadedBlockchainData) {
+      // 如果有存储的数据，恢复区块链状态
+      const blockchain = new Blockchain();
+      blockchain.chain = loadedBlockchainData.chain;
+      blockchain.pendingTransactions = loadedBlockchainData.pendingTransactions;
+      blockchain.difficulty = loadedBlockchainData.difficulty;
+      blockchain.miningReward = loadedBlockchainData.miningReward;
+      
+      blockchainCache = blockchain;
+      console.log('区块链数据已从KV存储加载');
+    } else {
+      // 否则创建新的区块链
+      blockchainCache = new Blockchain();
+      console.log('新的区块链已创建');
+      
+      // 将初始状态保存到KV
+      await saveBlockchain({
+        chain: blockchainCache.chain,
+        pendingTransactions: blockchainCache.pendingTransactions,
+        difficulty: blockchainCache.difficulty,
+        miningReward: blockchainCache.miningReward
+      }, env);
+    }
+    
+    // 尝试从KV加载钱包数据
+    const loadedWallet = await loadWallet(env);
+    
+    if (loadedWallet) {
+      walletCache = loadedWallet;
+      console.log('钱包数据已从KV存储加载');
+    } else {
+      // 为演示目的创建一个静态钱包
+      walletCache = {
+        publicKey: "04c7facf88f8746f46c7b1f6bf596d2b1345a2295cabe69a489d064c93a0a622a031d21aec2f141c3e751ca224465b47705ef0e350e50da580b431dbf93b8b002e",
+        privateKey: "34bc0fb863f166ac3d1b3e9e5215a3607b6c3efb5a0afc65ba16fa5e3aa95293"
+      };
+      console.log('新的钱包已创建');
+      
+      // 将钱包保存到KV
+      await saveWallet(walletCache, env);
+    }
+    
+    console.log(`默认钱包地址: ${walletCache.publicKey}`);
+    return { blockchain: blockchainCache, wallet: walletCache };
+  } catch (error) {
+    console.error('初始化区块链失败:', error);
+    // 出错时使用内存中的实现
+    blockchainCache = new Blockchain();
+    walletCache = {
       publicKey: "04c7facf88f8746f46c7b1f6bf596d2b1345a2295cabe69a489d064c93a0a622a031d21aec2f141c3e751ca224465b47705ef0e350e50da580b431dbf93b8b002e",
       privateKey: "34bc0fb863f166ac3d1b3e9e5215a3607b6c3efb5a0afc65ba16fa5e3aa95293"
     };
-    console.log(`默认钱包地址: ${wallet.publicKey}`);
+    return { blockchain: blockchainCache, wallet: walletCache };
   }
-  return { blockchain, wallet };
 }
 
 // 处理CORS预检请求
@@ -46,7 +100,7 @@ function addCorsHeaders(response) {
 }
 
 // 处理API请求
-async function handleRequest(request) {
+async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
@@ -57,7 +111,7 @@ async function handleRequest(request) {
   }
 
   // 确保区块链已初始化
-  const { blockchain, wallet } = initBlockchain();
+  const { blockchain, wallet } = await initBlockchain(env);
   
   // 路由处理
   try {
@@ -90,6 +144,14 @@ async function handleRequest(request) {
         // 添加到待处理交易
         blockchain.addTransaction(tx);
         
+        // 保存更新后的区块链状态到KV
+        await saveBlockchain({
+          chain: blockchain.chain,
+          pendingTransactions: blockchain.pendingTransactions,
+          difficulty: blockchain.difficulty,
+          miningReward: blockchain.miningReward
+        }, env);
+        
         return new Response(JSON.stringify({ 
           message: 'Transaction added successfully',
           transaction: tx
@@ -118,6 +180,14 @@ async function handleRequest(request) {
       
       // 挖掘待处理交易
       blockchain.minePendingTransactions(minerAddress);
+      
+      // 保存更新后的区块链状态到KV
+      await saveBlockchain({
+        chain: blockchain.chain,
+        pendingTransactions: blockchain.pendingTransactions,
+        difficulty: blockchain.difficulty,
+        miningReward: blockchain.miningReward
+      }, env);
       
       return new Response(JSON.stringify({
         message: 'Block mined successfully',
@@ -149,6 +219,27 @@ async function handleRequest(request) {
         headers: { 'Content-Type': 'application/json' }
       });
     }
+
+    // 重置区块链（仅用于测试）
+    if (path === '/reset' && method === 'POST') {
+      // 创建新的区块链
+      blockchainCache = new Blockchain();
+      
+      // 保存更新后的区块链状态到KV
+      await saveBlockchain({
+        chain: blockchainCache.chain,
+        pendingTransactions: blockchainCache.pendingTransactions,
+        difficulty: blockchainCache.difficulty,
+        miningReward: blockchainCache.miningReward
+      }, env);
+      
+      return new Response(JSON.stringify({
+        message: 'Blockchain has been reset',
+        blockchain: blockchainCache
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
     
     // 路径不匹配任何API端点
     return new Response(JSON.stringify({ error: 'Endpoint not found' }), {
@@ -166,7 +257,7 @@ async function handleRequest(request) {
 
 // Worker入口点
 addEventListener('fetch', event => {
-  const response = handleRequest(event.request)
+  const response = handleRequest(event.request, event.env)
     .then(resp => addCorsHeaders(resp))
     .catch(err => {
       console.error('Worker error:', err);
@@ -183,4 +274,4 @@ addEventListener('fetch', event => {
 });
 
 // 导出以供测试
-module.exports = { handleRequest };
+module.exports = { handleRequest, initBlockchain };
