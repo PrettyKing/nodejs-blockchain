@@ -1,6 +1,8 @@
 // worker.js - Cloudflare Worker入口文件
-const crypto = require('crypto-browserify');
-const EC = require('elliptic').ec;
+import * as CryptoES from 'crypto-es';
+import { ec as EC } from 'elliptic';
+
+// 初始化椭圆曲线
 const ec = new EC('secp256k1');
 
 // 区块类
@@ -15,7 +17,7 @@ class Block {
 
   calculateHash() {
     const data = this.previousHash + this.timestamp + JSON.stringify(this.transactions) + this.nonce;
-    return crypto.createHash('sha256').update(data).digest('hex');
+    return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
   }
 
   // 工作量证明 (PoW)
@@ -42,7 +44,7 @@ class Transaction {
 
   calculateHash() {
     const data = this.fromAddress + this.toAddress + this.amount + this.timestamp;
-    return crypto.createHash('sha256').update(data).digest('hex');
+    return CryptoES.SHA256(data).toString(CryptoES.enc.Hex);
   }
 
   signTransaction(signingKey) {
@@ -51,7 +53,7 @@ class Transaction {
     }
 
     const hashTx = this.calculateHash();
-    const sig = signingKey.sign(hashTx, 'base64');
+    const sig = signingKey.sign(hashTx);
     this.signature = sig.toDER('hex');
   }
 
