@@ -5,6 +5,12 @@ import { ec as EC } from 'elliptic';
 // 初始化椭圆曲线
 const ec = new EC('secp256k1');
 
+// 内存存储，用于在没有KV的情况下运行
+const memoryStorage = {
+  blockchain: null,
+  pendingTransactions: []
+};
+
 // 区块类
 class Block {
   constructor(timestamp, transactions, previousHash = '') {
@@ -85,8 +91,31 @@ class Blockchain {
 
   // 初始化区块链数据
   async initialize(env) {
+    console.log('Initializing blockchain...');
+    
     try {
-      // 检查是否可以使用KV存储
+      // 检查是否使用内存存储
+      const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
+                             (env.USE_IN_MEMORY_STORE === 'true');
+      
+      console.log(`Using memory store: ${useMemoryStore}`);
+      
+      if (useMemoryStore) {
+        // 使用内存存储
+        if (memoryStorage.blockchain) {
+          this.chain = memoryStorage.blockchain;
+          this.pendingTransactions = memoryStorage.pendingTransactions || [];
+          console.log(`Loaded blockchain from memory with ${this.chain.length} blocks`);
+        } else {
+          // 首次初始化
+          memoryStorage.blockchain = this.chain;
+          memoryStorage.pendingTransactions = [];
+          console.log('Initialized new blockchain in memory');
+        }
+        return;
+      }
+      
+      // 使用KV存储
       if (!env || !env.BLOCKCHAIN_STORAGE) {
         console.warn('KV storage not available. Using in-memory blockchain only.');
         return;
@@ -100,7 +129,7 @@ class Blockchain {
       } else {
         // 如果没有存储的区块链，使用创世区块并保存
         await this.saveChain(env);
-        console.log('Initialized new blockchain with genesis block');
+        console.log('Initialized new blockchain with genesis block and saved to KV');
       }
 
       // 尝试从KV读取待处理交易
@@ -119,8 +148,20 @@ class Blockchain {
     return this.chain[this.chain.length - 1];
   }
 
-  // 保存区块链到KV存储
+  // 保存区块链到存储
   async saveChain(env) {
+    // 检查是否使用内存存储
+    const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
+                           (env.USE_IN_MEMORY_STORE === 'true');
+    
+    if (useMemoryStore) {
+      // 保存到内存
+      memoryStorage.blockchain = this.chain;
+      console.log('Blockchain saved to memory storage');
+      return;
+    }
+    
+    // 保存到KV
     if (!env || !env.BLOCKCHAIN_STORAGE) {
       console.warn('KV storage not available. Cannot save blockchain.');
       return;
@@ -134,8 +175,20 @@ class Blockchain {
     }
   }
 
-  // 保存待处理交易到KV存储
+  // 保存待处理交易到存储
   async savePendingTransactions(env) {
+    // 检查是否使用内存存储
+    const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
+                           (env.USE_IN_MEMORY_STORE === 'true');
+    
+    if (useMemoryStore) {
+      // 保存到内存
+      memoryStorage.pendingTransactions = this.pendingTransactions;
+      console.log('Pending transactions saved to memory storage');
+      return;
+    }
+    
+    // 保存到KV
     if (!env || !env.BLOCKCHAIN_STORAGE) {
       console.warn('KV storage not available. Cannot save pending transactions.');
       return;
@@ -264,7 +317,7 @@ async function getBlockchain(env) {
 
 // 创建响应函数
 function createResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
+  return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
       'Content-Type': 'application/json',
@@ -284,11 +337,9 @@ async function handleRequest(request, env) {
   console.log(`Handling ${method} request to ${path}`);
 
   // 检查环境变量
-  if (!env) {
-    console.warn('Environment object is undefined');
-  } else if (!env.BLOCKCHAIN_STORAGE) {
-    console.warn('BLOCKCHAIN_STORAGE binding is undefined');
-  }
+  const useMemoryStore = !env || !env.BLOCKCHAIN_STORAGE || 
+                         (env.USE_IN_MEMORY_STORE === 'true');
+  console.log(`Storage mode: ${useMemoryStore ? 'In-Memory' : 'KV'}`);
 
   // 处理预检请求
   if (method === 'OPTIONS') {
@@ -374,15 +425,31 @@ async function handleRequest(request, env) {
     else if (path === '/debug' && method === 'GET') {
       // 调试端点，用于诊断KV和其他问题
       return createResponse({
+        timestamp: new Date().toISOString(),
+        storage: useMemoryStore ? "In-Memory" : "KV",
         envAvailable: !!env,
         kvAvailable: !!(env && env.BLOCKCHAIN_STORAGE),
         blockchainInitialized: !!blockchainInstance,
         blockCount: blockchain.chain.length,
-        pendingTransactionCount: blockchain.pendingTransactions.length
+        pendingTransactionCount: blockchain.pendingTransactions.length,
+        variables: env ? {
+          USE_IN_MEMORY_STORE: env.USE_IN_MEMORY_STORE
+        } : "No env available"
       });
     }
     else {
-      return createResponse({ error: 'Not found', path: path }, 404);
+      return createResponse({ 
+        error: 'Not found', 
+        path: path,
+        availablePaths: [
+          '/blockchain', 
+          '/transaction', 
+          '/mine', 
+          '/balance/:address', 
+          '/wallet/new',
+          '/debug'
+        ]
+      }, 404);
     }
   } catch (error) {
     console.error('Error handling request:', error);
@@ -395,7 +462,7 @@ async function handleRequest(request, env) {
   }
 }
 
-// Worker入口点
+// Worker入口点 - 使用ES模块格式
 export default {
   async fetch(request, env, ctx) {
     return handleRequest(request, env);
