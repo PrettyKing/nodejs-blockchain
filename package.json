@@ -6,8 +6,12 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "node2": "HTTP_PORT=3002 P2P_PORT=6002 PEERS=ws://localhost:6001 node index.js",
-    "node3": "HTTP_PORT=3003 P2P_PORT=6003 PEERS=ws://localhost:6001,ws://localhost:6002 node index.js",
+    "node2-win": "set HTTP_PORT=3002 && set P2P_PORT=6002 && set PEERS=ws://localhost:6001 && node index.js",
+    "node3-win": "set HTTP_PORT=3003 && set P2P_PORT=6003 && set PEERS=ws://localhost:6001,ws://localhost:6002 && node index.js",
+    "node2-unix": "HTTP_PORT=3002 P2P_PORT=6002 PEERS=ws://localhost:6001 node index.js",
+    "node3-unix": "HTTP_PORT=3003 P2P_PORT=6003 PEERS=ws://localhost:6001,ws://localhost:6002 node index.js",
+    "node2": "cross-env HTTP_PORT=3002 P2P_PORT=6002 PEERS=ws://localhost:6001 node index.js",
+    "node3": "cross-env HTTP_PORT=3003 P2P_PORT=6003 PEERS=ws://localhost:6001,ws://localhost:6002 node index.js",
     "test": "jest"
   },
   "keywords": [
@@ -21,6 +25,7 @@
   "dependencies": {
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
     "crypto-js": "^4.2.0",
     "elliptic": "^6.5.4",
     "express": "^4.18.2",
