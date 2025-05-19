@@ -1,6 +1,7 @@
 // p2p-server.js - 区块链P2P网络服务器
 const WebSocket = require('ws');
 const config = require('./config');
+const { Transaction } = require('./blockchain');
 
 class P2pServer {
   constructor(blockchain) {
@@ -38,17 +39,42 @@ class P2pServer {
   // 消息处理
   messageHandler(socket) {
     socket.on('message', message => {
-      const data = JSON.parse(message);
-      
-      switch(data.type) {
-        case 'CHAIN':
-          this.blockchain.replaceChain(data.chain);
-          break;
-        case 'TRANSACTION':
-          this.blockchain.addTransaction(data.transaction);
-          break;
+      try {
+        const data = JSON.parse(message);
+        
+        switch(data.type) {
+          case 'CHAIN':
+            console.log('收到新的区块链数据');
+            this.blockchain.replaceChain(data.chain);
+            break;
+          case 'TRANSACTION':
+            console.log('收到新的交易');
+            // 重建交易对象以确保它有所有正确的方法
+            const transaction = this.createTransactionFromData(data.transaction);
+            this.blockchain.addTransaction(transaction);
+            break;
+          default:
+            console.log('收到未知类型的消息');
+        }
+      } catch (error) {
+        console.error('处理消息时出错:', error.message);
       }
     });
+  }
+
+  // 从接收到的数据创建交易对象
+  createTransactionFromData(transactionData) {
+    const transaction = new Transaction(
+      transactionData.fromAddress,
+      transactionData.toAddress,
+      transactionData.amount
+    );
+    
+    // 复制其他属性
+    transaction.timestamp = transactionData.timestamp;
+    transaction.signature = transactionData.signature;
+    
+    return transaction;
   }
 
   // 发送区块链数据
