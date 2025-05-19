@@ -1,6 +1,7 @@
 name = "nodejs-blockchain"
 main = "worker.js"
 compatibility_date = "2025-05-19"
+compatibility_flags = [ "nodejs_compat" ]
 
 [vars]
 DIFFICULTY = "2"
@@ -8,7 +9,7 @@ MINING_REWARD = "100"
 
 # 定义KV存储 - 用于持久化区块链数据
 kv_namespaces = [
-  { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-here", preview_id = "your-preview-kv-id-here" }
+  { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-here" }
 ]
 
 # 定义一个Durable Object - 用于存储区块链状态
@@ -20,3 +21,17 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_classes = ["BlockchainObject"]
+
+# 设置CORS头，允许任何源进行请求
+[routes]
+pattern = "*/*"
+script = "worker.js"
+
+# 部署在Workers.dev子域名上
+workers_dev = true
+
+# 可选：指定自定义域名
+# [env.production]
+# routes = [
+#   { pattern = "api.your-domain.com", custom_domain = true }
+# ]
