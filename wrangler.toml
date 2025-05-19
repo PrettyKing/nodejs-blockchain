@@ -1,31 +1,8 @@
-name = "blockchain-api"
-main = "cloudflare-worker.js"
-compatibility_date = "2023-01-01"
+name = "blockchain-worker"
+main = "worker.js"
+compatibility_date = "2023-09-04"
 
-# KV命名空间配置
-# 运行 wrangler kv:namespace create "BLOCKCHAIN_KV" 获取ID
-# 然后将下面的YOUR_NAMESPACE_ID替换为实际ID
+# 添加KV命名空间来存储区块链数据
 kv_namespaces = [
-  { binding = "BLOCKCHAIN_KV", id = "YOUR_NAMESPACE_ID" }
+  { binding = "BLOCKCHAIN_STORAGE", id = "your-kv-id-will-go-here", preview_id = "your-preview-kv-id-will-go-here" }
 ]
-
-# 资源配置
-[vars]
-DIFFICULTY = "2"  # 默认挖矿难度
-
-# 开发环境配置
-[env.dev]
-name = "blockchain-api-dev"
-# 开发环境可以使用较低的挖矿难度
-[env.dev.vars]
-DIFFICULTY = "1"
-
-# 生产环境配置
-[env.production]
-name = "blockchain-api"
-# 路由配置，如果您有自定义域名
-# route = { pattern = "api.yourdomain.com/blockchain/*", zone_id = "your-zone-id" }
-
-# 触发器配置，可以添加定时任务
-[triggers]
-crons = []
